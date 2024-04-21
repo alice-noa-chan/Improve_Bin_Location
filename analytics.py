@@ -2,9 +2,7 @@
 import pandas as pd
 from sklearn.cluster import KMeans
 from geopy.geocoders import Nominatim
-from geopy.extra.rate_limiter import RateLimiter
 from geopy.distance import geodesic
-import time
 import numpy as np
 from scipy.spatial import cKDTree
 import asyncio
@@ -19,6 +17,7 @@ n_clusters = 100  # Number of new bins
 min_distance_m = 50  # Minimum distance (meters) for final selection
 min_input_distance_m = 100  # Minimum allowable interval between data in an existing dataset
 IS_ALLOW_SAME_LAT_LONG = 0  # 0 to disallow same lat-long, 1 to allow
+PASS_NOMINATIM_VALID_CHECK = 0  # 0 to use Nominatim validation, 1 to skip it
 
 # Function to validate and filter data based on latitude and longitude validity
 def validate_and_filter_data(df):
@@ -52,6 +51,7 @@ filtered_locations_df = filter_close_points(locations_df, min_input_distance_m)
 kmeans = KMeans(n_clusters=n_clusters, random_state=0).fit(filtered_locations_df[['latitude', 'longitude']])
 new_locations = kmeans.cluster_centers_
 
+
 # Initialize the Nominatim Geocoder for location verification
 geolocator = Nominatim(user_agent="geoapiExercises")
 geocode = RateLimiter(geolocator.geocode, min_delay_seconds=1)
@@ -60,6 +60,7 @@ geolocator.headers = {'Accept-Language': 'ko'}
 async def is_in_target_city(session, latitude, longitude, target_city):
     """ Asynchronously check if a given latitude and longitude are within a specified target city. """
     try:
+        await asyncio.sleep(1)  # Ensure 1 second delay between requests to comply with API usage policy
         async with session.get(f"https://nominatim.openstreetmap.org/reverse?format=json&lat={latitude}&lon={longitude}") as response:
             result = await response.json()
             return target_city in result['address']['county']
@@ -67,14 +68,18 @@ async def is_in_target_city(session, latitude, longitude, target_city):
         return False
 
 async def filter_locations(locations, target_city):
-    """ Filter locations to find those within a specified target city using asynchronous API calls. """
+    """ Filter locations asynchronously to find those within a specified target city. """
     async with aiohttp.ClientSession() as session:
         tasks = [is_in_target_city(session, lat, lon, target_city) for lat, lon in locations]
         results = await asyncio.gather(*tasks)
         return [loc for loc, res in zip(locations, results) if res]
 
-# Run the async filtering task
-filtered_locations = asyncio.run(filter_locations(new_locations, 'Daejeon Metropolitan City'))
+if PASS_NOMINATIM_VALID_CHECK == 0:
+    # Run the async filtering task if validation is not skipped
+    filtered_locations = asyncio.run(filter_locations(new_locations, 'Daejeon Metropolitan City'))
+else:
+    # Skip validation and use all new locations
+    filtered_locations = new_locations
 
 # Minimum distance filtering
 final_locations = []
