@@ -3,6 +3,7 @@ import pandas as pd
 from sklearn.cluster import KMeans
 from geopy.geocoders import Nominatim
 from geopy.distance import geodesic
+from geopy.extra.rate_limiter import RateLimiter
 import numpy as np
 from scipy.spatial import cKDTree
 import asyncio
